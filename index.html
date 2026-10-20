@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#16212B">
+<meta name="description" content="Scan, grade and price your Pokémon card collection.">
+<title>Binder Scan</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <h1>Binder Scan</h1>
+  <span class="count" id="hdrCount">0 cards</span>
+</div></header>
+
+<main id="main">
+  <!-- ============ SCAN ============ -->
+  <section id="view-scan" class="wrap view">
+    <div class="capture">
+      <div class="frame" id="frame">
+        <img id="preview" alt="Your card photo" hidden>
+        <div class="frame-empty" id="frameEmpty">
+          <span class="lens" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#16212B" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="4"/></svg></span>
+          <p><b>Photograph a card</b></p>
+          <p class="hint">Fill the frame with the card, upright, on a dark surface. Tilt it slightly to kill glare on holos.</p>
+        </div>
+      </div>
+      <div class="row">
+        <label class="btn primary" for="camInput">Take photo</label>
+        <label class="btn" for="galInput">Choose from gallery</label>
+      </div>
+      <input type="file" id="camInput" accept="image/*" capture="environment" class="visually-hidden">
+      <input type="file" id="galInput" accept="image/*" class="visually-hidden">
+    </div>
+
+    <form class="search" id="searchForm" autocomplete="off">
+      <label for="q" class="label">Or search by name and number</label>
+      <div class="search-row">
+        <input id="q" type="search" placeholder="charizard 4/102" enterkeyhint="search">
+        <button class="btn" type="submit">Search</button>
+      </div>
+    </form>
+
+    <div class="status" id="scanStatus" role="status" hidden></div>
+
+    <div id="resultsWrap" hidden>
+      <div class="section-head"><h2>Which card is it?</h2><span class="muted small" id="resultsNote"></span></div>
+      <ul class="pick-grid" id="results"></ul>
+    </div>
+  </section>
+
+  <!-- ============ BINDER ============ -->
+  <section id="view-binder" class="wrap view" hidden>
+    <div class="summary">
+      <div><span class="label">Est. value</span><b id="sValue">—</b><span class="small muted" id="sValueNote"></span></div>
+      <div><span class="label">Cards</span><b id="sCards">0</b><span class="small muted" id="sUnique"></span></div>
+      <div><span class="label">Graded</span><b id="sGraded">0</b></div>
+    </div>
+    <div class="tools">
+      <input id="filter" type="search" placeholder="Search your binder" aria-label="Search your binder">
+      <select id="sort" aria-label="Sort">
+        <option value="new">Newest</option>
+        <option value="value">Value</option>
+        <option value="name">Name</option>
+        <option value="set">Set</option>
+      </select>
+    </div>
+    <div class="row">
+      <button class="btn" id="btnRefresh">Update prices</button>
+    </div>
+    <div class="status" id="binderStatus" role="status" hidden></div>
+    <ul class="binder-grid" id="binder"></ul>
+    <div class="empty" id="empty" hidden>
+      <h2>Your binder is empty</h2>
+      <p class="muted">Scan a card, or import your backup from Settings.</p>
+      <button class="btn primary" data-go="scan">Scan a card</button>
+    </div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section id="view-settings" class="wrap view" hidden>
+    <h2>eBay pricing</h2>
+    <div class="f">
+      <label for="setWorker">eBay helper address</label>
+      <input id="setWorker" type="url" inputmode="url" placeholder="https://binder-ebay.yourname.workers.dev">
+      <span class="small muted">The Cloudflare Worker from the setup guide. It holds your eBay keys so they never sit in this app.</span>
+    </div>
+    <div class="f">
+      <label for="setMarket">eBay site</label>
+      <select id="setMarket">
+        <option value="EBAY_US">ebay.com (USD, most sales)</option>
+        <option value="EBAY_CA">ebay.ca (CAD)</option>
+      </select>
+    </div>
+    <div class="row"><button class="btn" id="btnTestWorker">Test connection</button></div>
+    <div class="status" id="workerStatus" role="status" hidden></div>
+
+    <h2>Card data</h2>
+    <div class="f">
+      <label for="setKey">Pokémon TCG API key (optional)</label>
+      <input id="setKey" type="text" autocapitalize="off" spellcheck="false" placeholder="Raises the free rate limit">
+      <span class="small muted">Free at dev.pokemontcg.io. Works without one at a lower limit.</span>
+    </div>
+
+    <h2>Backup</h2>
+    <p class="small muted">Your binder is stored on this phone. Export a backup now and then, and to move to a new phone.</p>
+    <div class="row">
+      <button class="btn" id="btnExport">Export backup</button>
+      <label class="btn" for="importInput">Import backup</label>
+      <input type="file" id="importInput" accept="application/json,.json" class="visually-hidden">
+    </div>
+    <div class="status" id="backupStatus" role="status" hidden></div>
+    <p class="small muted" id="storageInfo"></p>
+    <p class="small muted">Card data and images from the Pokémon TCG API. Prices: TCGplayer via the Pokémon TCG API, and eBay. Not affiliated with Nintendo, The Pokémon Company or eBay.</p>
+  </section>
+</main>
+
+<nav class="tabs"><div class="wrap">
+  <button data-go="scan" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="4"/></svg>Scan</button>
+  <button data-go="binder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="7" height="9" rx="1"/><rect x="13" y="3" width="7" height="9" rx="1"/><rect x="4" y="14" width="7" height="7" rx="1"/><rect x="13" y="14" width="7" height="7" rx="1"/></svg>Binder</button>
+  <button data-go="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
+</div></nav>
+
+<div class="sheet" id="sheet" hidden>
+  <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="wrap" id="sheetBody"></div>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="conditions.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
