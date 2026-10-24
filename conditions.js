@@ -1,4 +1,4 @@
-/* Binder Scan — reads card condition out of eBay listings.
+/* Binder Scan — reads card condition and language out of eBay / 130point listings.
    parseListing(listing, card) -> { status: "match"|"other"|"unknown"|"excluded", cond, reason }
    A listing is { title, conditionId, condition, descriptors:[{name, values:[...]}], description } */
 (function (root) {
@@ -15,9 +15,46 @@
     ["ACE", /\bace\b(?=\s*(grad|10|9|8|7|6|5|4|3|2|1))/],
   ];
 
-  // Words that mean "not a single real card" or "not actually graded".
   const EXCLUDE = /\b(lot|lots|bundle|bulk|proxy|proxies|custom|orica|fan ?art|replica|reprint|fake|digital|code card|online code|you pick|pick your|choose your|random|mystery|repack|empty (slab|case)|slab only|case only|sticker|binder|sleeves?|playmat|jumbo|oversized?)\b/;
   const GRADE_HEDGE = /\b(ready|candidate|potential|worthy|quality|possible|possibly|maybe|could|would|should|grade ?able|gradeable|send ?in|submission|for grading|to grade|not graded|ungraded|raw)\b/;
+
+  /* ---- language ---- */
+  const LANGS = ["English", "Japanese", "Korean", "Chinese"];
+  const LANG_WORDS = {
+    Japanese: /\b(japanese|japan|jpn|jp)\b|日本語/,
+    Korean: /\b(korean|korea|kor|kr)\b|한국/,
+    Chinese: /\b(chinese|china|traditional chinese|simplified chinese|t-?chinese|s-?chinese|chn|cn|taiwan)\b/,
+    English: /\b(english|eng|en)\b/,
+  };
+  /* Script ranges, for reading a scanned card rather than a listing. */
+  const SCRIPTS = {
+    kana: /[぀-ゟ゠-ヿ]/,
+    hangul: /[가-힯ᄀ-ᇿ㄰-㆏]/,
+    han: /[一-鿿㐀-䶿]/,
+  };
+  function detectScript(text) {
+    const s = String(text || "");
+    if (SCRIPTS.hangul.test(s)) return "Korean";
+    if (SCRIPTS.kana.test(s)) return "Japanese";
+    if (SCRIPTS.han.test(s)) return "Chinese";
+    return null;
+  }
+  /* A listing's language: what it says, else what its title is written in, else English. */
+  function listingLanguage(listing) {
+    const d = listing.descriptors || [];
+    const langSpec = d.find((e) => /language/i.test(String(e.name || "")));
+    if (langSpec) {
+      const v = String((langSpec.values || [])[0] || "").toLowerCase();
+      for (const L of LANGS) if (LANG_WORDS[L].test(v)) return L;
+    }
+    const t = norm(listing.title);
+    const raw = String(listing.title || "");
+    const script = detectScript(raw);
+    for (const L of ["Japanese", "Korean", "Chinese"]) if (LANG_WORDS[L].test(t)) return L;
+    if (script) return script;
+    if (LANG_WORDS.English.test(t)) return "English";
+    return "English"; // unmarked listings are English by convention on eBay
+  }
 
   function norm(s) {
     return String(s || "")
@@ -34,7 +71,6 @@
     return null;
   }
 
-  /* Graded: grader name, then a grade within a few words. */
   function findGraded(t) {
     const g = graderFromText(t);
     if (!g) return null;
@@ -42,7 +78,6 @@
     const re = new RegExp("\\b" + key + "\\b(?:\\s+[a-z]+){0,3}?\\s*(10|9\\.5|[1-9](?:\\.5)?)\\b");
     const m = t.match(re);
     if (!m) return null;
-    // "PSA 10 ready", "potential PSA 10", "PSA 10 candidate?"
     const around = t.slice(Math.max(0, m.index - 25), m.index + m[0].length + 25);
     if (GRADE_HEDGE.test(around)) return { hedged: true };
     let grade = m[1];
@@ -56,7 +91,6 @@
     return { type: "graded", grader: g, grade: special ? `${special} 10` : grade, label };
   }
 
-  /* Raw condition words. "EX" and "HP" are avoided where they collide with card names / hit points. */
   const RAW_PATTERNS = [
     ["DMG", /\b(dmg|damaged|damage|creased?|creasing|water damage|torn|tear|ripped|bent|writing on|inked)\b/],
     ["HP", /\b(heavily played|heavy play|heavy wear|poor condition|poor)\b|(?<![0-9]\s?)\bhp\b(?!\s?[0-9])/],
@@ -69,18 +103,16 @@
     const found = [];
     for (const [cond, re] of RAW_PATTERNS) {
       let s = t.replace(/\b(never played|unplayed|not played)\b/g, " pack fresh ");
-      if (cond === "MP") s = s.replace(/\b(lightly|moderately|heavily|slightly) played\b/g, " "); // keep "played" alone for MP
+      if (cond === "MP") s = s.replace(/\b(lightly|moderately|heavily|slightly) played\b/g, " ");
       if (cond === "NM") s = s.replace(/\bnear mint\b/g, " near_mint ").replace(/\bgem mint\b/g, " ");
       if (cond === "NM" && /\bnear_mint\b/.test(s)) { found.push(cond); continue; }
       if (re.test(s)) found.push(cond);
     }
     if (!found.length) return null;
-    // Several conditions mentioned ("NM/LP") -> take the worst, to stay conservative.
     found.sort((a, b) => RAW_ORDER.indexOf(b) - RAW_ORDER.indexOf(a));
     return { type: "raw", condition: found[0], label: found[0] };
   }
 
-  /* eBay item specifics for trading cards (category 183454 and similar). */
   function fromDescriptors(listing) {
     const d = listing.descriptors || [];
     const get = (rx) => {
@@ -128,11 +160,13 @@
     return null;
   }
 
-  /* Does the listing look like the same card (number, edition)? */
   function sameCard(listing, card) {
     const t = norm(listing.title);
     if (EXCLUDE.test(t)) return { ok: false, reason: "lot, proxy or accessory" };
     if (card) {
+      const cardLang = card.language || "English";
+      const listLang = listingLanguage(listing);
+      if (listLang !== cardLang) return { ok: false, reason: `${listLang} card` };
       const num = String(card.number || "").toLowerCase().replace(/^0+(?=\d)/, "");
       if (num) {
         const numRe = new RegExp("(^|[^0-9a-z])0*" + num.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(\\s?/|$|[^0-9])");
@@ -179,7 +213,6 @@
     const m = Math.floor(a.length / 2);
     return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2;
   }
-  /* Median after dropping outliers outside 1.5×IQR (when there are enough points). */
   function robustStats(nums) {
     const a = nums.filter((n) => isFinite(n) && n > 0).sort((x, y) => x - y);
     if (!a.length) return null;
@@ -192,7 +225,7 @@
     return { median: median(kept), low: kept[0], high: kept[kept.length - 1], n: kept.length, dropped: a.length - kept.length };
   }
 
-  const api = { parseListing, readCondition, sameCard, robustStats, median, norm, RAW_ORDER };
+  const api = { parseListing, readCondition, sameCard, robustStats, median, norm, RAW_ORDER, LANGS, detectScript, listingLanguage };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.BinderConditions = api;
 })(typeof self !== "undefined" ? self : this);

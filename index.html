@@ -38,17 +38,34 @@
       </div>
       <input type="file" id="camInput" accept="image/*" capture="environment" class="visually-hidden">
       <input type="file" id="galInput" accept="image/*" class="visually-hidden">
+      <div class="f">
+        <label for="scanLang">Card language</label>
+        <select id="scanLang">
+          <option value="auto">Detect automatically</option>
+          <option value="English">English</option>
+          <option value="Japanese">Japanese</option>
+          <option value="Korean">Korean</option>
+          <option value="Chinese">Chinese</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="status" id="scanStatus" role="status" hidden></div>
+    <div class="seg" id="langRetry" hidden>
+      <span class="label seg-label">Read it again as</span>
+      <button type="button" data-lang="English">English</button>
+      <button type="button" data-lang="Japanese">Japanese</button>
+      <button type="button" data-lang="Korean">Korean</button>
+      <button type="button" data-lang="Chinese">Chinese</button>
     </div>
 
     <form class="search" id="searchForm" autocomplete="off">
-      <label for="q" class="label">Or search by name and number</label>
+      <label for="q" class="label">Or search by English name and number</label>
       <div class="search-row">
         <input id="q" type="search" placeholder="charizard 4/102" enterkeyhint="search">
         <button class="btn" type="submit">Search</button>
       </div>
     </form>
-
-    <div class="status" id="scanStatus" role="status" hidden></div>
 
     <div id="resultsWrap" hidden>
       <div class="section-head"><h2>Which card is it?</h2><span class="muted small" id="resultsNote"></span></div>
@@ -58,13 +75,14 @@
 
   <!-- ============ BINDER ============ -->
   <section id="view-binder" class="wrap view" hidden>
+    <div class="strip" id="binderStrip"></div>
     <div class="summary">
-      <div><span class="label">Est. value</span><b id="sValue">—</b><span class="small muted" id="sValueNote"></span></div>
+      <div class="value-tile"><span class="label">Binder value</span><b id="sValue">—</b><span class="small muted" id="sValueNote"></span></div>
       <div><span class="label">Cards</span><b id="sCards">0</b><span class="small muted" id="sUnique"></span></div>
       <div><span class="label">Graded</span><b id="sGraded">0</b></div>
     </div>
     <div class="tools">
-      <input id="filter" type="search" placeholder="Search your binder" aria-label="Search your binder">
+      <input id="filter" type="search" placeholder="Search this binder" aria-label="Search this binder">
       <select id="sort" aria-label="Sort">
         <option value="new">Newest</option>
         <option value="value">Value</option>
@@ -74,11 +92,12 @@
     </div>
     <div class="row">
       <button class="btn" id="btnRefresh">Update prices</button>
+      <button class="btn" id="btnEditBinder">Edit binder</button>
     </div>
     <div class="status" id="binderStatus" role="status" hidden></div>
     <ul class="binder-grid" id="binder"></ul>
     <div class="empty" id="empty" hidden>
-      <h2>Your binder is empty</h2>
+      <h2>This binder is empty</h2>
       <p class="muted">Scan a card, or import your backup from Settings.</p>
       <button class="btn primary" data-go="scan">Scan a card</button>
     </div>
@@ -86,18 +105,11 @@
 
   <!-- ============ SETTINGS ============ -->
   <section id="view-settings" class="wrap view" hidden>
-    <h2>eBay pricing</h2>
+    <h2>Prices</h2>
     <div class="f">
-      <label for="setWorker">eBay helper address</label>
+      <label for="setWorker">Price helper address</label>
       <input id="setWorker" type="url" inputmode="url" placeholder="https://binder-ebay.yourname.workers.dev">
-      <span class="small muted">The Cloudflare Worker from the setup guide. It holds your eBay keys so they never sit in this app.</span>
-    </div>
-    <div class="f">
-      <label for="setMarket">eBay site</label>
-      <select id="setMarket">
-        <option value="EBAY_US">ebay.com (USD, most sales)</option>
-        <option value="EBAY_CA">ebay.ca (CAD)</option>
-      </select>
+      <span class="small muted">Your Cloudflare Worker. It searches ebay.ca, ebay.com and ebay.co.uk together, looks up 130point sold prices, and converts everything to Canadian dollars.</span>
     </div>
     <div class="row"><button class="btn" id="btnTestWorker">Test connection</button></div>
     <div class="status" id="workerStatus" role="status" hidden></div>
@@ -108,9 +120,12 @@
       <input id="setKey" type="text" autocapitalize="off" spellcheck="false" placeholder="Raises the free rate limit">
       <span class="small muted">Free at dev.pokemontcg.io. Works without one at a lower limit.</span>
     </div>
+    <div class="row"><button class="btn" id="btnTestNames">Test card-name data</button></div>
+    <div class="status" id="namesStatus" role="status" hidden></div>
+    <p class="small muted">Japanese, Korean and Chinese names are matched to their English card names using a free list downloaded once and kept on this phone.</p>
 
     <h2>Backup</h2>
-    <p class="small muted">Your binder is stored on this phone. Export a backup now and then, and to move to a new phone.</p>
+    <p class="small muted">Your binders live on this phone. Export a backup now and then, and to move to a new phone.</p>
     <div class="row">
       <button class="btn" id="btnExport">Export backup</button>
       <label class="btn" for="importInput">Import backup</label>
@@ -118,13 +133,13 @@
     </div>
     <div class="status" id="backupStatus" role="status" hidden></div>
     <p class="small muted" id="storageInfo"></p>
-    <p class="small muted">Card data and images from the Pokémon TCG API. Prices: TCGplayer via the Pokémon TCG API, and eBay. Not affiliated with Nintendo, The Pokémon Company or eBay.</p>
+    <p class="small muted">Card data and images from the Pokémon TCG API. Prices: TCGplayer via the Pokémon TCG API, eBay, and 130point. Exchange rates from the European Central Bank. Not affiliated with Nintendo, The Pokémon Company, eBay or 130point.</p>
   </section>
 </main>
 
 <nav class="tabs"><div class="wrap">
   <button data-go="scan" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="4"/></svg>Scan</button>
-  <button data-go="binder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="7" height="9" rx="1"/><rect x="13" y="3" width="7" height="9" rx="1"/><rect x="4" y="14" width="7" height="7" rx="1"/><rect x="13" y="14" width="7" height="7" rx="1"/></svg>Binder</button>
+  <button data-go="binder"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="7" height="9" rx="1"/><rect x="13" y="3" width="7" height="9" rx="1"/><rect x="4" y="14" width="7" height="7" rx="1"/><rect x="13" y="14" width="7" height="7" rx="1"/></svg>Binders</button>
   <button data-go="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</button>
 </div></nav>
 
@@ -136,6 +151,7 @@
 <div class="toast" id="toast" role="status" hidden></div>
 
 <script src="conditions.js"></script>
+<script src="names.js"></script>
 <script src="app.js"></script>
 </body>
 </html>
