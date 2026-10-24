@@ -3,7 +3,7 @@
    eBay, exchange rates and 130point: your own Cloudflare Worker (see the setup guide). */
 "use strict";
 
-const APP_VERSION = "3.1.0";
+const APP_VERSION = "3.2.0";
 const TCG_API = "https://api.pokemontcg.io/v2";
 const TCG_SELECT = "id,name,number,rarity,set,images,tcgplayer,supertype";
 const C = window.BinderConditions;
@@ -590,7 +590,6 @@ function openCardSheet(id) {
         <span>eBay asking, ${esc(condLabel(c))}</span><span class="v">${sumLine(c.ebay?.active)}</span>
         <span>TCGplayer market${c.condType === "graded" ? " (raw)" : ""}</span><span class="v">${tm ? (c.tcg?.url ? `<a href="${esc(c.tcg.url)}" target="_blank" rel="noopener">${money(tm)}</a>` : money(tm)) : "—"}</span>
       </div>
-      <div id="dJtcgOthers" hidden></div>
       <div class="row"><button class="primary" id="dCheck">${c.ebay || c.p130 || c.jtcg ? "Re-check prices" : "Check prices"}</button></div>
       <div class="status" id="dEbayStatus" hidden></div>
       <div id="dListings"></div>
@@ -629,18 +628,7 @@ function openCardSheet(id) {
   $("dNo").onclick = () => ($("dConfirm").hidden = true);
   $("dYes").onclick = async () => { await deleteCard(c.id); closeSheet(); toast("Removed"); };
   $("dClose").onclick = closeSheet;
-  if (c.listings?.length) renderListings(c);
-  renderJtcgOthers(c);
-}
-/* JustTCG also prices the other conditions and grades of the same card. */
-function renderJtcgOthers(c) {
-  const box = $("dJtcgOthers"); if (!box) return;
-  const others = (c.jtcg?.others || []).filter((o) => o.price != null && o.label);
-  if (!others.length) { box.hidden = true; return; }
-  box.hidden = false;
-  box.innerHTML = `<details><summary class="small">Other conditions and grades (${others.length})</summary>
-    <div class="kv">${others.map((o) => `<span>${esc(o.label)}</span><span class="v">${money(o.price, "CAD")}</span>`).join("")}</div>
-    ${c.jtcg.updated ? `<p class="small muted">JustTCG updated ${esc(String(c.jtcg.updated).slice(0, 10))}${c.jtcg.version === "v1" ? " · v1, graded prices need the v2 beta" : ""}.</p>` : ""}</details>`;
+  renderSources(c);
 }
 function jtcgLine(c) {
   const j = c.jtcg;
@@ -778,9 +766,11 @@ async function checkPrices(id) {
         price: v ? cad(v.price, v.currency || "USD") : null, orig: v ? { value: v.price, currency: v.currency } : null,
         condition: v?.condition || null, printing: v?.printing || null, grading: v?.grading || null,
         change24h: v?.change24h ?? null, updated: v?.updated || null,
-        others: (jt.value.variants || []).filter((x) => x !== v).slice(0, 12).map((x) => ({
+        variants: (jt.value.variants || []).slice(0, 24).map((x) => ({
           label: x.grading ? `${x.grading.company} ${x.grading.label || x.grading.grade}` : [x.condition, x.printing].filter(Boolean).join(" · "),
-          price: cad(x.price, x.currency || "USD") })) };
+          graded: !!x.grading, condition: x.condition, printing: x.printing,
+          price: cad(x.price, x.currency || "USD"), orig: { value: x.price, currency: x.currency },
+          change24h: x.change24h ?? null, mine: v ? x.id === v.id : false })) };
     } else c.jtcg = { at: Date.now(), error: jt.reason.message, code: jt.reason.code };
 
     c.listings = listings.slice(0, 120);
@@ -800,25 +790,68 @@ async function checkPrices(id) {
   } finally { if ($("dCheck")) $("dCheck").disabled = false; }
 }
 
-function renderListings(c) {
-  const ls = c.listings || [];
-  const box = $("dListings"); if (!box || !ls.length) return;
-  let filter = "match";
+/* One tab per price source. JustTCG gives prices per condition; the other two give real listings. */
+let srcTab = null, condFilter = "match";
+function renderSources(c) {
+  const box = $("dListings"); if (!box) return;
+  const all = c.listings || [];
+  const tabs = [
+    { k: "justtcg", label: "JustTCG", n: (c.jtcg?.variants || []).length, has: !!c.jtcg },
+    { k: "130point", label: "130point", n: all.filter((l) => l.source === "130point").length, has: !!c.p130 },
+    { k: "ebay", label: "eBay", n: all.filter((l) => l.source === "eBay").length, has: !!c.ebay },
+  ].filter((t) => t.has);
+  if (!tabs.length) { box.hidden = true; return; }
+  box.hidden = false;
+  if (!tabs.some((t) => t.k === srcTab)) srcTab = (tabs.find((t) => t.n > 0) || tabs[0]).k;
+
   const draw = () => {
-    const show = ls.filter((l) => filter === "all" ? true : filter === "unknown" ? l.status === "unknown" : filter === "other" ? l.status === "other" : l.status === "match");
-    box.innerHTML = `<div class="filters" role="group" aria-label="Filter listings">
-      ${[["match", "Matches " + condLabel(c)], ["other", "Other conditions"], ["unknown", "Not stated"], ["all", "All"]].map(([k, t]) => `<button type="button" data-f="${k}" aria-pressed="${k === filter}">${esc(t)}</button>`).join("")}</div>
-      <ul class="listings">${show.slice(0, 40).map((l) => `<li>
+    const head = `<div class="srctabs" role="tablist">${tabs.map((t) =>
+      `<button type="button" role="tab" data-s="${t.k}" aria-selected="${t.k === srcTab}">${esc(t.label)}${t.n ? `<span class="n">${t.n}</span>` : ""}</button>`).join("")}</div>`;
+    box.innerHTML = head + (srcTab === "justtcg" ? jtcgPanel(c) : listingPanel(c, srcTab));
+    box.querySelector(".srctabs").onclick = (e) => { const b = e.target.closest("button"); if (b) { srcTab = b.dataset.s; draw(); } };
+    const f = box.querySelector(".filters");
+    if (f) f.onclick = (e) => { const b = e.target.closest("button"); if (b) { condFilter = b.dataset.f; draw(); } };
+  };
+  draw();
+}
+function jtcgPanel(c) {
+  const j = c.jtcg;
+  if (j.error) return `<p class="panel-msg err">${esc(j.error)}</p>${quotaLine(j)}`;
+  const vs = (j.variants || []).filter((v) => v.price != null);
+  if (!vs.length) return `<p class="panel-msg">${esc(j.note || "JustTCG has no prices for this card yet.")}</p>${quotaLine(j)}`;
+  const raw = vs.filter((v) => !v.graded), graded = vs.filter((v) => v.graded);
+  const row = (v) => `<li class="${v.mine ? "mine" : ""}">
+      <span>${esc(v.label || "—")}${v.mine ? ` <span class="tag match">yours</span>` : ""}</span>
+      <span class="p">${money(v.price, "CAD")}${v.orig && v.orig.currency !== "CAD" ? `<br><span class="muted">${esc(money(Number(v.orig.value), v.orig.currency))}</span>` : ""}
+      ${v.change24h != null && Math.abs(v.change24h) >= 0.5 ? `<br><span class="small ${v.change24h > 0 ? "up" : "down"}">${v.change24h > 0 ? "+" : ""}${v.change24h.toFixed(1)}%</span>` : ""}</span></li>`;
+  return `<ul class="pricelist">
+      ${raw.length ? `<li class="grp">Raw</li>${raw.map(row).join("")}` : ""}
+      ${graded.length ? `<li class="grp">Graded</li>${graded.map(row).join("")}` : `<li class="grp">Graded</li><li><span class="muted small">No graded prices for this card${j.version === "v1" ? " — JustTCG's v2 beta didn't answer, and v1 covers raw only" : " yet"}.</span></li>`}
+    </ul>
+    <p class="small muted">Sold-based prices per condition, not individual sales${j.updated ? ` · updated ${esc(String(j.updated).slice(0, 10))}` : ""}. ${quotaText(j)}</p>`;
+}
+const quotaText = (j) => j.quota ? `${j.quota.remaining != null ? `${j.quota.remaining} of ${j.quota.dailyCap || 100} calls left today` : `${j.quota.usedToday ?? 0} calls used today`}.` : "";
+const quotaLine = (j) => j.quota ? `<p class="small muted">${quotaText(j)}</p>` : "";
+
+function listingPanel(c, source) {
+  const ls = (c.listings || []).filter((l) => l.source === (source === "ebay" ? "eBay" : "130point"));
+  const err = source === "130point" ? c.p130?.error : c.ebay?.active?.errorText;
+  if (!ls.length) return `<p class="panel-msg ${err ? "err" : ""}">${esc(err || "No listings from this source.")}</p>`;
+  const show = ls.filter((l) => condFilter === "all" ? true : condFilter === "unknown" ? l.status === "unknown" : condFilter === "other" ? l.status === "other" : l.status === "match");
+  const counts = ls.reduce((a, l) => ((a[l.status] = (a[l.status] || 0) + 1), a), {});
+  const stat = source === "130point" ? c.p130?.stats : c.ebay?.active;
+  return `<div class="filters" role="group" aria-label="Filter listings">
+      ${[["match", `Matches ${condLabel(c)} (${counts.match || 0})`], ["other", `Other (${counts.other || 0})`], ["unknown", `Not stated (${counts.unknown || 0})`], ["all", `All (${ls.length})`]]
+        .map(([k, t]) => `<button type="button" data-f="${k}" aria-pressed="${k === condFilter}">${esc(t)}</button>`).join("")}</div>
+    ${stat?.median ? `<p class="small muted">Median of the ${stat.n} matching ${source === "130point" ? "sales" : "listings"}: <b class="mono">${money(stat.median, "CAD")}</b>${stat.dropped ? ` · ${stat.dropped} outlier${stat.dropped === 1 ? "" : "s"} dropped` : ""}</p>` : ""}
+    <ul class="listings">${show.slice(0, 40).map((l) => `<li>
         ${l.url ? `<a href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.title)}</a>` : `<span>${esc(l.title)}</span>`}
         <span class="p">${money(l.price, "CAD")}${l.orig && l.orig.currency !== "CAD" ? `<br><span class="muted">${esc(money(Number(l.orig.value), l.orig.currency))}</span>` : ""}</span>
         <span class="c"><span class="tag">${l.kind === "sold" ? "Sold" + (l.date ? " " + fmtDate(l.date) : "") : "Listed"}</span>
-        <span class="tag">${esc(l.source === "130point" ? "130point" : l.site)}</span>
+        ${source === "ebay" ? `<span class="tag">${esc(l.site)}</span>` : ""}
         <span class="tag ${l.status === "match" ? "match" : l.status === "unknown" ? "unknown" : ""}">${esc(l.status === "excluded" ? "skipped: " + l.reason : l.cond || "condition not stated")}</span>
         ${l.src && l.src !== "title" ? `<span class="tag">from ${esc(l.src)}</span>` : ""}</span></li>`).join("") || `<li><span class="muted small">Nothing in this group.</span></li>`}</ul>
-      <p class="small muted">Checked ${ago(c.ebay?.at || c.p130?.at)} · search “${esc(c.ebay?.query || c.p130?.query || "")}” · prices converted to CAD${rates?.source ? ` using ${esc(rates.source)}` : ""}. Asking prices are what sellers want, not what cards sold for.</p>`;
-    box.querySelector(".filters").onclick = (e) => { const b = e.target.closest("button"); if (b) { filter = b.dataset.f; draw(); } };
-  };
-  draw();
+    <p class="small muted">Checked ${ago(source === "130point" ? c.p130?.at : c.ebay?.at)} · search “${esc(c.ebay?.query || c.p130?.query || "")}”${rates?.source ? ` · converted to CAD using ${esc(rates.source)}` : ""}.${source === "ebay" ? " Asking prices are what sellers want, not what cards sold for." : ""}</p>`;
 }
 function fmtDate(d) { const t = new Date(d); return isFinite(t) ? t.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : String(d).slice(0, 10); }
 

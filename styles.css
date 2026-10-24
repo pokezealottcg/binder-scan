@@ -206,3 +206,24 @@ a { color: var(--accent); }
 .down { color: var(--bad); font-family: var(--mono); }
 details summary { cursor: pointer; color: var(--muted); padding: 4px 0; }
 details .kv { padding-top: 6px; }
+
+/* ---- price source tabs ---- */
+.srctabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.srctabs button {
+  flex: 1 1 auto; border: none; background: none; border-bottom: 2px solid transparent; border-radius: 0;
+  padding: 9px 6px; font: 600 14px var(--body); color: var(--muted); display: flex; align-items: center; justify-content: center; gap: 5px;
+}
+.srctabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.srctabs .n { font: 500 11px var(--mono); background: var(--pocket); color: var(--muted); border-radius: 8px; padding: 1px 6px; }
+.srctabs button[aria-selected="true"] .n { background: var(--accent); color: var(--accent-ink); }
+.panel-msg { font-size: 13px; color: var(--muted); padding: 14px 2px; }
+.panel-msg.err { color: var(--bad); }
+.pricelist { list-style: none; margin: 0; padding: 0; }
+.pricelist li { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--line); font-size: 14px; }
+.pricelist li.grp {
+  display: block; border-top: none; padding: 12px 0 4px; font: 600 11px var(--body);
+  text-transform: uppercase; letter-spacing: .08em; color: var(--muted);
+}
+.pricelist li.grp + li { border-top: none; }
+.pricelist li.mine { font-weight: 600; }
+.pricelist .p { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; text-align: right; line-height: 1.35; }

@@ -1,6 +1,6 @@
 /* Binder Scan service worker: keeps the app working offline and caches official card images.
    Bump VERSION whenever you upload changed app files, so phones pick up the new version. */
-const VERSION = "bs-3.1.0";
+const VERSION = "bs-3.2.0";
 const SHELL = ["./", "index.html", "styles.css", "app.js", "conditions.js", "names.js", "manifest.webmanifest", "icon-192.png", "icon-512.png"];
 const IMG_CACHE = "bs-card-images";
 
